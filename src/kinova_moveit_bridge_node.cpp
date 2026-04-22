@@ -12,8 +12,10 @@
 
 using namespace std::placeholders;
 
-KinovaMoveitBridge::KinovaMoveitBridge(const rclcpp::NodeOptions &options)
-                    :rclcpp::Node("kinova_moveit_bridge",options)
+KinovaMoveitBridge::KinovaMoveitBridge(const rclcpp::NodeOptions &options,
+                                    std::shared_ptr<kinova_wrapper::KinovaInterface> kinova)
+                    :rclcpp::Node("kinova_moveit_bridge",options),
+                    kinova_(std::move(kinova))
                     {
                         
                         this->declare_parameter("robot_ip","192.168.1.10");
@@ -22,7 +24,7 @@ KinovaMoveitBridge::KinovaMoveitBridge(const rclcpp::NodeOptions &options)
                         // TODO: Publish /robot_status topic for external visibility of connection state.
                         // TODO: Move connect() to async init or lifecycle on_activate() so node startup
                         //       is not blocked by slow network calls.
-                        bool connection=kinova_.connect(ip);
+                        bool connection=kinova_->connect(ip);
                         if(!connection){
                             RCLCPP_ERROR(get_logger(),"failed to connect with IP: %s",ip.c_str());
                         }
@@ -30,7 +32,7 @@ KinovaMoveitBridge::KinovaMoveitBridge(const rclcpp::NodeOptions &options)
                         // Action server intitialization with 3 callbacks
                         action_server_=rclcpp_action::create_server<FollowJointTrajectory>(
                             this,
-                            "follow_joint_trajectory",
+                            "/kinova_moveit_bridge/follow_joint_trajectory",
                             std::bind(&KinovaMoveitBridge::handle_goal,this,_1,_2),
                             std::bind(&KinovaMoveitBridge::handle_cancel,this,_1),
                             std::bind(&KinovaMoveitBridge::handle_accepted,this,_1)
@@ -44,7 +46,7 @@ rclcpp_action::GoalResponse KinovaMoveitBridge::handle_goal(
              
                 (void)uuid;
 
-                if(!kinova_.isConnected() || kinova_.isEStopActive()){
+                if(!kinova_->isConnected() || kinova_->isEStopActive()){
                     return rclcpp_action::GoalResponse::REJECT;
                 }
                 
@@ -61,7 +63,7 @@ rclcpp_action::GoalResponse KinovaMoveitBridge::handle_goal(
 rclcpp_action::CancelResponse KinovaMoveitBridge::handle_cancel(
             const std::shared_ptr<GoalHandle> goal_handle){
                 
-                kinova_.emergencyStop();  // Stops all the current work
+                kinova_->emergencyStop();  // Stops all the current work
                 (void)goal_handle;
                 return rclcpp_action::CancelResponse::ACCEPT;
             }
@@ -85,7 +87,7 @@ void KinovaMoveitBridge::execute(const std::shared_ptr<GoalHandle> goal_handle)
 
     RCLCPP_INFO(get_logger(), " Received trajectory with %zu waypoints", traj.size());
 
-    bool ok=kinova_.executeTrajectory(traj);
+    bool ok=kinova_->executeTrajectory(traj);
     
     if(ok){
         goal_handle->succeed(result);
@@ -113,14 +115,6 @@ std::vector<kinova_wrapper::TrajectoryPoint> KinovaMoveitBridge::convertTrajecto
 
             }
         
-int main(int argc, char ** argv)
-{
-    rclcpp::init(argc, argv);
-    auto node = std::make_shared<KinovaMoveitBridge>(rclcpp::NodeOptions{});
-    rclcpp::spin(node);
-    rclcpp::shutdown();
-    return 0;
-}       
 
                              
 

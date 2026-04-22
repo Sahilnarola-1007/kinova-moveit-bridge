@@ -7,6 +7,7 @@
 #include <trajectory_msgs/msg/joint_trajectory_point.hpp>
 #include<vector>
 #include<kinova_wrapper/KinovaInterface.hpp>
+#include<memory>
 
 using FollowJointTrajectory= control_msgs::action::FollowJointTrajectory;
 using JointTrajectory=trajectory_msgs::msg::JointTrajectory;
@@ -14,7 +15,9 @@ using GoalHandle=rclcpp_action::ServerGoalHandle<FollowJointTrajectory>;
 
 class KinovaMoveitBridge:public rclcpp::Node{
     public:
-        explicit KinovaMoveitBridge(const rclcpp::NodeOptions& options);
+        explicit KinovaMoveitBridge(
+            const rclcpp::NodeOptions& options,
+        std::shared_ptr<kinova_wrapper::KinovaInterface> kinova);
   
     private:
         
@@ -30,10 +33,10 @@ class KinovaMoveitBridge:public rclcpp::Node{
 
         void handle_accepted(const std::shared_ptr<GoalHandle> goal_handle);    
         
-        void execute(const std::shared_ptr<GoalHandle> goal_hangle);
+        void execute(const std::shared_ptr<GoalHandle> goal_handle);
         
         std::vector<kinova_wrapper::TrajectoryPoint> convertTrajectory(
             const JointTrajectory& traj);
 
-        kinova_wrapper::KinovaInterface kinova_;
+        std::shared_ptr<kinova_wrapper::KinovaInterface> kinova_;
         };

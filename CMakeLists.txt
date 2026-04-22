@@ -16,34 +16,44 @@ find_package(kinova_wrapper REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+  
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_bridge_integration test/test_bridge_integration.cpp src/kinova_moveit_bridge_node.cpp src/kinova_gripper_bridge.cpp)
+  ament_target_dependencies(test_bridge_integration
+  rclcpp rclcpp_action control_msgs trajectory_msgs kinova_wrapper)
+
+target_include_directories(test_bridge_integration PRIVATE include)
 endif()
 
-add_executable(kinova_moveit_bridge_node
-  src/kinova_moveit_bridge_node.cpp)
+# ----- Single executable hosting both bridges -----
+add_executable(kinova_bridge_node
+  src/main.cpp
+  src/kinova_moveit_bridge_node.cpp
+  src/kinova_gripper_bridge.cpp
+)
 
-ament_target_dependencies(kinova_moveit_bridge_node
+ament_target_dependencies(kinova_bridge_node
   rclcpp
   trajectory_msgs
   control_msgs
   action_msgs
   rclcpp_action
   kinova_wrapper
-  )
+)
 
-install (TARGETS kinova_moveit_bridge_node
+target_include_directories(kinova_bridge_node PUBLIC
+  include include/${PROJECT_NAME}
+)
+
+install(TARGETS kinova_bridge_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-target_include_directories(kinova_moveit_bridge_node PUBLIC
-  include include/${PROJECT_NAME}
-  )
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
 
 ament_package()
