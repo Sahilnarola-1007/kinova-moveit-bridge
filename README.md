@@ -7,15 +7,43 @@ ROS 2 bridge between MoveIt 2 and the KinovaInterface C++ wrapper. Hosts two act
 
 Both nodes share a single `KinovaInterface` instance via `MultiThreadedExecutor`.
 
-## Launch
+## MoveIt2 Integration
 
+### Build
+```bash
+# Mock SDK (no hardware required)
+colcon build --packages-select kinova_wrapper --cmake-args -DUSE_KORTEX_MOCK=ON
+colcon build --packages-select kinova_moveit_bridge
+source install/setup.bash
+```
+
+### Launch
 ```bash
 ros2 launch kinova_moveit_bridge kinova_bringup.launch.py
 ```
 
-Launches: RSP + JSP GUI + move_group + RViz + bridge (trajectory + gripper).
+### What launches
+| Node | Role |
+|---|---|
+| `robot_state_publisher` | Publishes URDF → /tf |
+| `kinova_bridge_node` | FollowJointTrajectory + GripperCommand action servers |
+| `move_group` | OMPL/Pilz planner, trajectory execution (delayed 3s) |
+| `rviz2` | MoveIt motion planning UI |
 
-## Testing
+### Usage
+1. In RViz, select group `manipulator`
+2. Drag the interactive marker to a target pose
+3. Click **Plan** then **Execute**
+4. Monitor progress in terminal — bridge logs waypoint execution 1–100%
+
+### Hardware
+Set robot IP at launch:
+```bash
+ros2 launch kinova_moveit_bridge kinova_bringup.launch.py robot_ip:=192.168.1.10
+```
+Remove `USE_KORTEX_MOCK=ON` flag when building for real hardware.
+
+## Testing for Mock
 
 ### Integration Tests
 
