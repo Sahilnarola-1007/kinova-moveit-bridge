@@ -1,10 +1,10 @@
-# kinova_bringup.launch.py
-#
-# Single launch file to bring up the full simulated Kinova + MoveIt + bridge stack.
-# Starts: robot_state_publisher, joint_state_publisher_gui, move_group, rviz2, and our bridge.
-#
-# Usage:
-#   ros2 launch kinova_moveit_bridge kinova_bringup.launch.py
+''' kinova_bringup.launch.py
+
+ Single launch file to bring up the full Kinova + MoveIt + bridge stack.
+ Starts: robot_state_publisher, move_group (delayed 3s), rviz2, and our bridge.
+ Usage:
+   ros2 launch kinova_moveit_bridge kinova_bringup.launch.py
+'''
  
 import os
  
@@ -62,16 +62,10 @@ def generate_launch_description():
         output="screen",
         parameters=[moveit_config.robot_description],
     )
+
+    # REMOVED: joint_state_publisher_gui — bridge publishes /joint_states from hardware.
+    # Add jsp_gui_node here only for pure-sim (no bridge) testing.
  
-    # -------------------------------------------------------------------------
-    # joint_state_publisher_gui — slider-driven /joint_states
-    # (acts as the fake hardware source for Day 16/17 sim)
-    # -------------------------------------------------------------------------
-    jsp_gui_node = Node(
-        package="joint_state_publisher_gui",
-        executable="joint_state_publisher_gui",
-        output="screen",
-    )
  
     # -------------------------------------------------------------------------
     # move_group — OMPL/Pilz planners, trajectory execution, scene monitor
@@ -125,10 +119,10 @@ def generate_launch_description():
         launch_args
         + [
             rsp_node,
-            jsp_gui_node,
+            bridge_node,
+            #jsp_gui_node,
             delayed_move_group,
             rviz_node,
-            bridge_node,
         ]
     )
  

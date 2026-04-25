@@ -8,6 +8,9 @@
 #include<vector>
 #include<kinova_wrapper/KinovaInterface.hpp>
 #include<memory>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include<std_srvs/srv/trigger.hpp>
+
 
 using FollowJointTrajectory= control_msgs::action::FollowJointTrajectory;
 using JointTrajectory=trajectory_msgs::msg::JointTrajectory;
@@ -39,4 +42,15 @@ class KinovaMoveitBridge:public rclcpp::Node{
             const JointTrajectory& traj);
 
         std::shared_ptr<kinova_wrapper::KinovaInterface> kinova_;
-        };
+
+        rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr clear_faults_service_;
+    
+        rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
+        rclcpp::TimerBase::SharedPtr joint_state_timer_;
+
+        std::jthread execute_thread_;
+        
+        void publishJointStates();
+        void handleClearFaults(const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+                std::shared_ptr<std_srvs::srv::Trigger::Response> response);    
+    };

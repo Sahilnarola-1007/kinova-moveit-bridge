@@ -1,3 +1,6 @@
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 cmake_minimum_required(VERSION 3.8)
 project(kinova_moveit_bridge)
 
@@ -13,6 +16,8 @@ find_package(control_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(kinova_wrapper REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -23,7 +28,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_bridge_integration test/test_bridge_integration.cpp src/kinova_moveit_bridge_node.cpp src/kinova_gripper_bridge.cpp)
   ament_target_dependencies(test_bridge_integration
-  rclcpp rclcpp_action control_msgs trajectory_msgs kinova_wrapper)
+  rclcpp rclcpp_action control_msgs trajectory_msgs kinova_wrapper sensor_msgs std_srvs) 
 
 target_include_directories(test_bridge_integration PRIVATE include)
 endif()
@@ -42,6 +47,8 @@ ament_target_dependencies(kinova_bridge_node
   action_msgs
   rclcpp_action
   kinova_wrapper
+  sensor_msgs
+  std_srvs
 )
 
 target_include_directories(kinova_bridge_node PUBLIC

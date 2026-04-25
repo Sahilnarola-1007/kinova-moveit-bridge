@@ -6,6 +6,7 @@
 #include<vector>
 #include<kinova_moveit_bridge/kinova_moveit_bridge_node.hpp>
 
+
 #include<thread>
 #include<iostream>
 
@@ -23,10 +24,14 @@ KinovaMoveitBridge::KinovaMoveitBridge(const rclcpp::NodeOptions &options,
 
                         // TODO: Publish /robot_status topic for external visibility of connection state.
                         // TODO: Move connect() to async init or lifecycle on_activate() so node startup
-                        //       is not blocked by slow network calls.
+                        // is not blocked by slow network calls.
                         bool connection=kinova_->connect(ip);
                         if(!connection){
                             RCLCPP_ERROR(get_logger(),"failed to connect with IP: %s",ip.c_str());
+                        }
+
+                        else {
+                            kinova_->clearEmergencyStop();  // clear any leftover faults from previous session
                         }
 
                         // Action server intitialization with 3 callbacks
@@ -37,7 +42,19 @@ KinovaMoveitBridge::KinovaMoveitBridge(const rclcpp::NodeOptions &options,
                             std::bind(&KinovaMoveitBridge::handle_cancel,this,_1),
                             std::bind(&KinovaMoveitBridge::handle_accepted,this,_1)
                         );
+                
+                    joint_state_pub_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
 
+                    joint_state_timer_ = this->create_wall_timer(
+                    std::chrono::milliseconds(50),
+                    std::bind(&KinovaMoveitBridge::publishJointStates, this));
+        
+                    clear_faults_service_ = this->create_service<std_srvs::srv::Trigger>(
+                    "/kinova_moveit_bridge/clear_faults",
+                    std::bind(&KinovaMoveitBridge::handleClearFaults, this,
+                    std::placeholders::_1, std::placeholders::_2));
+                
+        
                     }
 
 rclcpp_action::GoalResponse KinovaMoveitBridge::handle_goal(
@@ -68,9 +85,12 @@ rclcpp_action::CancelResponse KinovaMoveitBridge::handle_cancel(
                 return rclcpp_action::CancelResponse::ACCEPT;
             }
 
-void KinovaMoveitBridge::handle_accepted(const std::shared_ptr<GoalHandle> goal_handle){
-    std::thread{std::bind(&KinovaMoveitBridge::execute,this,goal_handle)}.detach();  
-} 
+void KinovaMoveitBridge::handle_accepted(const std::shared_ptr<GoalHandle> goal_handle) {
+    if (execute_thread_.joinable()) {
+        execute_thread_.join();
+    }
+    execute_thread_ = std::jthread([this, goal_handle]() { execute(goal_handle); });
+}
 
 
 void KinovaMoveitBridge::execute(const std::shared_ptr<GoalHandle> goal_handle)
@@ -87,7 +107,25 @@ void KinovaMoveitBridge::execute(const std::shared_ptr<GoalHandle> goal_handle)
 
     RCLCPP_INFO(get_logger(), " Received trajectory with %zu waypoints", traj.size());
 
-    bool ok=kinova_->executeTrajectory(traj);
+    auto feedback = std::make_shared<FollowJointTrajectory::Feedback>();
+
+    auto fb_callback = [&](const std::vector<double>& joints, double progress) {
+    feedback->joint_names = goal->trajectory.joint_names;
+    feedback->actual.positions = joints;
+
+    size_t idx = static_cast<size_t>(progress * traj.size()) - 1;
+    if (idx < traj.size()) {
+        feedback->desired.positions = traj[idx].joint_angles;
+        feedback->desired.time_from_start.sec = static_cast<int32_t>(traj[idx].time_from_start);
+        feedback->desired.time_from_start.nanosec = static_cast<uint32_t>(
+            (traj[idx].time_from_start - static_cast<int32_t>(traj[idx].time_from_start)) * 1e9);
+    }
+
+    goal_handle->publish_feedback(feedback);
+    RCLCPP_INFO(get_logger(), "Progress: %.0f%%", progress * 100.0);
+    };
+
+    bool ok = kinova_->executeTrajectory(traj, fb_callback);
     
     if(ok){
         goal_handle->succeed(result);
@@ -114,6 +152,38 @@ std::vector<kinova_wrapper::TrajectoryPoint> KinovaMoveitBridge::convertTrajecto
                 return result;
 
             }
+
+void KinovaMoveitBridge::publishJointStates() {
+    if (!kinova_->isConnected()) return;
+
+    auto angles = kinova_->getJointAngles();
+    if (angles.empty()) return;
+
+    sensor_msgs::msg::JointState msg;
+    msg.header.stamp = this->now();
+    msg.name = {"joint_1", "joint_2", "joint_3", "joint_4",
+            "joint_5", "joint_6", "joint_7",
+            "robotiq_85_left_knuckle_joint"};  // add this
+
+    // get gripper position from wrapper
+    auto gripper_pos = kinova_->getGripperPosition() * 0.8;  // denormalize [0,1] → [0, 0.8 rad]
+
+    msg.position = angles;
+    msg.position.push_back(gripper_pos);  // append gripper
+    
+    joint_state_pub_->publish(msg);
+    }
+
+void KinovaMoveitBridge::handleClearFaults(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+    (void)request;
+    bool ok = kinova_->clearEmergencyStop();
+    response->success = ok;
+    response->message = ok ? "Faults cleared, ready to operate"
+                           : "Failed to clear faults, e-stop still active";
+    RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
+}
         
 
                              
